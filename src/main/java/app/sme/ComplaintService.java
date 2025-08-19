@@ -1,18 +1,31 @@
 package app.sme;
 
+import app.sme.service_quality.ComplainStatisticRepository;
+import app.sme.service_quality.ComplaintServiceQualityReportDto;
+import app.sme.service_quality.ComplaintsStatistic;
+import app.sme.service_quality.IComplaintServiceQuality;
 import lombok.RequiredArgsConstructor;
+import org.apache.poi.openxml4j.opc.OPCPackage;
 import org.apache.poi.ss.usermodel.*;
+import org.apache.poi.xwpf.usermodel.*;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Service;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
 public class ComplaintService {
     private final ComplaintRepository complaintRepository;
+    private final ComplainStatisticRepository complainStatisticRepository;
 
     private Sheet getRequiredSheet(Workbook workbook, String sheetName) {
         Sheet sheet = workbook.getSheet(sheetName);
@@ -61,6 +74,105 @@ public class ComplaintService {
             }
         } catch (IOException e) {
             throw new RuntimeException("Lỗi đọc/ghi file Excel", e);
+        }
+    }
+
+    public byte[] exportServiceQualityDoc() {
+        //Data table
+        List<IComplaintServiceQuality> dataTable = complaintRepository.reportServiceQuality();
+        List<ComplaintServiceQualityReportDto> convertList = dataTable.stream()
+                .map(ComplaintServiceQualityReportDto::new)
+                .collect(Collectors.toList());
+
+        //Data chart
+        List<ComplaintsStatistic> chartData = complainStatisticRepository.findAll();
+
+        try (InputStream is = new ClassPathResource("templates/doc/bao_cao_ngay_cldv_sme.docx").getInputStream();
+             OPCPackage pkg = OPCPackage.open(is);
+             XWPFDocument doc = new XWPFDocument(pkg);
+             ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+
+            var now = LocalDate.now();
+            var date = now.getDayOfMonth();
+            var month = now.getMonthValue();
+            var year = now.getYear();
+            var reportDate = now.format(DateTimeFormatter.ofPattern("dd/MM/yyyy"));
+
+            Map<String, String> map = new HashMap<>();
+
+            map.put("${date}", String.valueOf(date));
+            map.put("${month}", String.valueOf(month));
+            map.put("${year}", String.valueOf(year));
+            map.put("${reportDate}", reportDate);
+
+            replaceTextInDocument(doc, map);
+
+
+            doc.write(out);
+            return out.toByteArray();
+
+
+        } catch (Exception e) {
+            throw new RuntimeException("Lỗi fill template DOCX", e);
+        }
+
+    }
+
+    private void replaceTextInDocument(XWPFDocument doc, Map<String, String> map) {
+        // Paragraphs
+        for (XWPFParagraph p : doc.getParagraphs()) {
+            replaceTextInParagraph(p, map);
+        }
+
+        // Tables
+        for (XWPFTable t : doc.getTables()) {
+            for (XWPFTableRow r : t.getRows()) {
+                for (XWPFTableCell c : r.getTableCells()) {
+                    for (XWPFParagraph p : c.getParagraphs()) {
+                        replaceTextInParagraph(p, map);
+                    }
+                }
+            }
+
+        }
+
+        // Headers/Footers (nếu có)
+        for (XWPFHeader header : doc.getHeaderList()) {
+            for (XWPFParagraph p : header.getParagraphs()) replaceTextInParagraph(p, map);
+            for (XWPFTable t : header.getTables()) {
+                for (XWPFTableRow r : t.getRows())
+                    for (XWPFTableCell c : r.getTableCells())
+                        for (XWPFParagraph p : c.getParagraphs()) replaceTextInParagraph(p, map);
+            }
+        }
+
+        for (XWPFFooter footer : doc.getFooterList()) {
+            for (XWPFParagraph p : footer.getParagraphs()) replaceTextInParagraph(p, map);
+        }
+    }
+
+
+    private void replaceTextInParagraph(XWPFParagraph paragraph, Map<String, String> map) {
+        StringBuilder sb = new StringBuilder();
+        for (XWPFRun run : paragraph.getRuns()) {
+            sb.append(run.text());
+        }
+        String combined = sb.toString();
+        boolean changed = false;
+        for (Map.Entry<String, String> e : map.entrySet()) {
+            if (combined.contains(e.getKey())) {
+                combined = combined.replace(e.getKey(), e.getValue());
+                changed = true;
+            }
+        }
+        if (changed) {
+            // clear old runs and set a single new run (giữ định dạng cơ bản)
+            int runCount = paragraph.getRuns().size();
+            for (int i = runCount - 1; i >= 0; i--) {
+                paragraph.removeRun(i);
+            }
+            XWPFRun newRun = paragraph.createRun();
+            newRun.setText(combined, 0);
         }
     }
 
