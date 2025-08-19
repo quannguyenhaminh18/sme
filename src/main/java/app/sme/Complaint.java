@@ -56,6 +56,9 @@ public class Complaint {
     @Column(name = "complaint_type", columnDefinition = "TEXT")
     private String complaintType;
 
+    @Column(name = "category")
+    private String category;
+
     @Column(name = "reception_method", columnDefinition = "TEXT")
     private String receptionMethod;
 
@@ -442,7 +445,4 @@ public class Complaint {
 
     @Column(name = "solution_code", length = 50)
     private String solutionCode;
-
-    @Column(name = "category", columnDefinition = "TEXT")
-    private String category;
 }
