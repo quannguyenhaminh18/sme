@@ -48,4 +48,20 @@ public interface ComplaintRepository extends Repository<Complaint, Long> {
             "       (cte.complaintRateMonth - cte.complaintRateLastMonth) / cte.complaintRateLastMonth as compareRate\n" +
             "FROM cte;\n", nativeQuery = true)
     List<IComplaintServiceQuality> reportServiceQuality();
+
+    @Query(
+            value = "SELECT category, count_yesterday FROM vw_complaints_stats ",
+            nativeQuery = true
+    )
+    List<Object[]> findYesterdayCounts();
+
+    @Query(value = "SELECT " +
+            "c.category, " +
+            "MAX(c.total_on_time_yesterday) AS total_on_time, " +
+            "MAX(c.total_received_yesterday) AS total_received " +
+            "FROM vw_complaints_stats c " +
+            "GROUP BY c.category",
+            nativeQuery = true)
+    List<Object[]> findYesterdayOnTimeAndReceivedCounts();
+
 }
