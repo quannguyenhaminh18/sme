@@ -1,8 +1,8 @@
-package app.sme.service_quality;
+package app.sme;
 
 import java.math.BigDecimal;
 
-public interface IComplaintServiceQuality {
+public interface DocxProjection {
     String getName();
 
     BigDecimal getKpi();

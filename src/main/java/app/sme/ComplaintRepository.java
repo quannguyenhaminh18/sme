@@ -1,6 +1,5 @@
 package app.sme;
 
-import app.sme.service_quality.IComplaintServiceQuality;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.Repository;
 
@@ -47,7 +46,7 @@ public interface ComplaintRepository extends Repository<Complaint, Long> {
             "       IF(cte.complaintRateMonth < cte.kpi, 'Đạt', 'Không đạt')                           AS kpiMonth,\n" +
             "       (cte.complaintRateMonth - cte.complaintRateLastMonth) / cte.complaintRateLastMonth as compareRate\n" +
             "FROM cte;\n", nativeQuery = true)
-    List<IComplaintServiceQuality> reportServiceQuality();
+    List<DocxProjection> reportServiceQuality();
 
     @Query(
             value = "SELECT category, count_yesterday FROM vw_complaints_stats ",
@@ -64,4 +63,14 @@ public interface ComplaintRepository extends Repository<Complaint, Long> {
             nativeQuery = true)
     List<Object[]> findYesterdayOnTimeAndReceivedCounts();
 
+    @Query(value =
+            "SELECT " +
+                    " c.category AS category, " +
+                    " SUM(CASE WHEN c.received_date = CURDATE() - INTERVAL 1 DAY THEN 1 ELSE 0 END) AS countYesterday, " +
+                    " SUM(CASE WHEN c.received_date BETWEEN DATE_FORMAT(CURDATE(), '%Y-%m-01') " +
+                    "          AND CURDATE() - INTERVAL 1 DAY THEN 1 ELSE 0 END) AS countThisMonth " +
+                    "FROM vw_complaint_summary_filtered c " +
+                    "GROUP BY c.category",
+            nativeQuery = true)
+    List<SLNgayProjection> findCountsYesterday();
 }

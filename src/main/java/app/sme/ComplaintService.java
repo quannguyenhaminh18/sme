@@ -1,9 +1,5 @@
 package app.sme;
 
-import app.sme.service_quality.ComplainStatisticRepository;
-import app.sme.service_quality.ComplaintServiceQualityReportDto;
-import app.sme.service_quality.ComplaintsStatistic;
-import app.sme.service_quality.IComplaintServiceQuality;
 import lombok.RequiredArgsConstructor;
 import org.apache.poi.openxml4j.opc.OPCPackage;
 import org.apache.poi.ss.usermodel.*;
@@ -15,6 +11,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.time.LocalDate;
+import java.time.YearMonth;
 import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.List;
@@ -25,7 +22,7 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class ComplaintService {
     private final ComplaintRepository complaintRepository;
-    private final ComplainStatisticRepository complainStatisticRepository;
+    private final CategoryRepository categoryRepository;
 
     private Sheet getRequiredSheet(Workbook workbook, String sheetName) {
         Sheet sheet = workbook.getSheet(sheetName);
@@ -37,187 +34,229 @@ public class ComplaintService {
 
     public byte[] exportExcelFile() {
         try (InputStream inputStream = getClass().getResourceAsStream("/templates/SME_Phu_luc.xlsx")) {
-            assert inputStream != null;
-            try (Workbook workbook = WorkbookFactory.create(inputStream)) {
-//                Sheet sheet = getRequiredSheet(workbook, "SL_ngay");
-//
-//                // Lấy danh sách category từ cột B8 đến B39
-//                int startRow = 7; // B8
-//                int endRow = 38;  // B39
-//                int categoryCol = 1; // Cột B
-//                java.util.List<String> categories = new java.util.ArrayList<>();
-//                for (int i = startRow; i <= endRow; i++) {
-//                    Row row = sheet.getRow(i);
-//                    if (row != null) {
-//                        Cell cell = row.getCell(categoryCol);
-//                        if (cell != null && cell.getCellType() == CellType.STRING) {
-//                            categories.add(cell.getStringCellValue().trim());
-//                        } else {
-//                            categories.add("");
-//                        }
-//                    } else {
-//                        categories.add("");
-//                    }
-//                }
-//
-//                // TEST: Override ngày hệ thống thành 2-8-2025 để kiểm tra logic xuất file
-//                LocalDate today = LocalDate.of(2025, 8, 3);
-//                LocalDate endDate = today.minusDays(1);
-//                int currentDay = endDate.getDayOfMonth();
-//                LocalDate firstDay = today.withDayOfMonth(1);
-//                java.sql.Date sqlStart = java.sql.Date.valueOf(firstDay);
-//                java.sql.Date sqlEnd = java.sql.Date.valueOf(endDate);
-//
-//                // Lấy dữ liệu count từ repository
-//                java.util.List<ComplaintCount> counts = complaintCountRepository.findByDateRange(sqlStart, sqlEnd);
-//                // Map: category -> (date -> count)
-//                java.util.Map<String, java.util.Map<Integer, Integer>> dataMap = new java.util.HashMap<>();
-//                for (ComplaintCount cc : counts) {
-//                    String cat = cc.getCategory() != null ? cc.getCategory().trim() : "";
-//                    int d = cc.getReportDate().toLocalDate().getDayOfMonth();
-//                    dataMap.computeIfAbsent(cat, k -> new java.util.HashMap<>()).put(d, cc.getTotalComplaints());
-//                }
-//
-//                // Ghi dữ liệu vào các ô từ H8 đến cột ứng với ngày hiện tại
-//                for (int rowIdx = startRow; rowIdx <= endRow; rowIdx++) {
-//                    String cat = categories.get(rowIdx - startRow);
-//                    Row row = sheet.getRow(rowIdx);
-//                    if (row == null) row = sheet.createRow(rowIdx);
-//                    for (int d = 1; d <= currentDay; d++) {
-//                        int colIdx = 7 + d - 1; // H là 7
-//                        Cell cell = row.getCell(colIdx, Row.MissingCellPolicy.CREATE_NULL_AS_BLANK);
-//                        int value = 0;
-//                        if (dataMap.containsKey(cat) && dataMap.get(cat).containsKey(d)) {
-//                            value = dataMap.get(cat).get(d);
-//                        }
-//                        cell.setCellValue(value);
-//                    }
-//                }
-//
-//                // === Tính tổng từng ngày cho hàng tổng (row 6, tức là dòng 7 Excel) ===
-//                int totalRowIdx = 6; // Hàng tổng là dòng 7 (index 6)
-//                Row totalRow = sheet.getRow(totalRowIdx);
-//                if (totalRow == null) totalRow = sheet.createRow(totalRowIdx);
-//                for (int d = 1; d <= currentDay; d++) {
-//                    int colIdx = 7 + d - 1; // H là 7
-//                    int sum = 0;
-//                    for (int rowIdx = startRow; rowIdx <= endRow; rowIdx++) {
-//                        Row row = sheet.getRow(rowIdx);
-//                        if (row != null) {
-//                            Cell cell = row.getCell(colIdx);
-//                            if (cell != null && cell.getCellType() == CellType.NUMERIC) {
-//                                sum += (int) cell.getNumericCellValue();
-//                            }
-//                        }
-//                    }
-//                    Cell totalCell = totalRow.getCell(colIdx, Row.MissingCellPolicy.CREATE_NULL_AS_BLANK);
-//                    totalCell.setCellValue(sum);
-//                }
+            if (inputStream == null) {
+                throw new IllegalArgumentException("Không tìm thấy file template SME_Phu_luc.xlsx");
+            }
+
+            try (Workbook workbook = WorkbookFactory.create(inputStream);
+                 ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+
+                Sheet sheet = getRequiredSheet(workbook, "SL_ngay");
+
+                // --- Lấy dữ liệu từ DB ---
+                Map<String, Long> categoryTotals = categoryRepository.findAll().stream()
+                        .collect(Collectors.toMap(Category::getName, Category::getTotalSubscriber));
+
+                List<SLNgayProjection> summaries = complaintRepository.findCountsYesterday();
+
+                Map<String, Long> yesterdayCounts = summaries.stream()
+                        .collect(Collectors.toMap(
+                                SLNgayProjection::getCategory,
+                                s -> s.getCountYesterday() != null ? s.getCountYesterday().longValue() : 0L
+                        ));
+
+                Map<String, Long> totalThisMonthUntilYesterday = summaries.stream()
+                        .collect(Collectors.toMap(
+                                SLNgayProjection::getCategory,
+                                s -> s.getCountThisMonth() != null ?
+                                        s.getCountThisMonth().longValue() : 0L
+                        ));
+
+
+                // --- Fill dữ liệu C7–C38 ---
+                for (int rowIndex = 6; rowIndex <= 37; rowIndex++) {
+                    Row row = sheet.getRow(rowIndex);
+                    if (row == null) continue;
+
+                    Cell nameCell = row.getCell(1); // cột B
+                    if (nameCell == null) continue;
+
+                    String categoryName = nameCell.getStringCellValue();
+                    if (categoryName == null || categoryName.isBlank()) continue;
+
+                    // điền total_subscriber vào cột C
+                    if (categoryTotals.containsKey(categoryName)) {
+                        Cell subscriberCell = row.getCell(2);
+                        if (subscriberCell == null) {
+                            subscriberCell = row.createCell(2);
+                        }
+                        subscriberCell.setCellValue(categoryTotals.get(categoryName));
+                    }
+
+                    // điền total_until_yesterday vào cột D
+                    if (totalThisMonthUntilYesterday.containsKey(categoryName)) {
+                        Cell dCell = row.getCell(3); // cột D = index 3
+                        if (dCell == null) {
+                            dCell = row.createCell(3);
+                        }
+                        dCell.setCellValue(totalThisMonthUntilYesterday.get(categoryName));
+                    }
+
+                    // điền count_yesterday vào đúng cột ngày hôm qua
+                    LocalDate yesterday = LocalDate.now().minusDays(1);
+                    int colIndex = 7 + yesterday.getDayOfMonth() - 1; // H = index 7
+                    if (yesterdayCounts.containsKey(categoryName)) {
+                        Cell dataCell = row.getCell(colIndex);
+                        if (dataCell == null) {
+                            dataCell = row.createCell(colIndex);
+                        }
+                        dataCell.setCellValue(yesterdayCounts.get(categoryName));
+                    }
+                }
+
+                // --- Update header H4 + C4 ---
+                LocalDate today = LocalDate.now();
+                int month = today.getMonthValue();
+                int year = today.getYear();
+                YearMonth yearMonth = YearMonth.of(year, month);
+                int daysInMonth = yearMonth.lengthOfMonth();
+
+                Row row4 = sheet.getRow(3);
+                if (row4 == null) {
+                    throw new IllegalStateException("Không tìm thấy row 4 trong sheet");
+                }
+
+                Cell h4Cell = row4.getCell(7);
+                if (h4Cell == null) {
+                    System.out.println("⚠️ H4 chưa tồn tại trong file template");
+                    h4Cell = row4.createCell(7);
+                }
+                h4Cell.setCellValue("T" + month + "." + year);
+
+                Cell c4Cell = row4.getCell(2);
+                if (c4Cell == null) {
+                    System.out.println("⚠️ C4 chưa tồn tại trong file template");
+                    c4Cell = row4.createCell(2);
+                }
+                c4Cell.setCellValue("Luỹ kế T" + month + "." + year);
+
+
+                // --- Update header ngày (H5–AL5) ---
+                Row row5 = sheet.getRow(4);
+                DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd/MM");
+                int startCol = 7; // H
+                int maxCol = 37;  // AL
+
+                CellStyle baseStyle = null;
+                Cell baseCell = row5.getCell(startCol);
+                if (baseCell != null) baseStyle = baseCell.getCellStyle();
+
+                for (int day = 1; day <= daysInMonth; day++) {
+                    LocalDate date = LocalDate.of(year, month, day);
+                    int colIndex = startCol + day - 1;
+                    Cell cell = row5.getCell(colIndex);
+                    if (cell == null) {
+                        cell = row5.createCell(colIndex);
+                        if (baseStyle != null) cell.setCellStyle(baseStyle);
+                    }
+                    cell.setCellValue(date.format(formatter));
+                }
+
                 Sheet sheet2 = this.getRequiredSheet(workbook, "KPI_ngay");
-                Map<String, Integer> serviceRowMap = new HashMap();
+                Map<String, Integer> serviceRowMap = new HashMap<>();
                 serviceRowMap.put("Dịch vụ CA", 7);
                 serviceRowMap.put("Dịch vụ BHXH", 12);
                 serviceRowMap.put("Dịch vụ Hóa đơn điện tử", 17);
                 serviceRowMap.put("Dịch vụ vTracking", 22);
-                Map<String, int[]> serviceTotalRowMap = new HashMap();
+                Map<String, int[]> serviceTotalRowMap = new HashMap<>();
                 serviceTotalRowMap.put("Dịch vụ CA", new int[]{28, 29});
                 serviceTotalRowMap.put("Dịch vụ BHXH", new int[]{33, 34});
                 serviceTotalRowMap.put("Dịch vụ Hóa đơn điện tử", new int[]{38, 39});
                 serviceTotalRowMap.put("Dịch vụ vTracking", new int[]{43, 44});
-                Map<String, Integer> normalizedServiceRowMap = new HashMap();
+                Map<String, Integer> normalizedServiceRowMap = new HashMap<>();
 
-                for(Map.Entry<String, Integer> e : serviceRowMap.entrySet()) {
-                    normalizedServiceRowMap.put(((String)e.getKey()).toLowerCase(), (Integer)e.getValue());
+                for (Map.Entry<String, Integer> e : serviceRowMap.entrySet()) {
+                    normalizedServiceRowMap.put(e.getKey().toLowerCase(), (Integer) e.getValue());
                 }
 
-                Map<String, int[]> normalizedServiceTotalRowMap = new HashMap();
+                Map<String, int[]> normalizedServiceTotalRowMap = new HashMap<>();
 
-                for(Map.Entry<String, int[]> e : serviceTotalRowMap.entrySet()) {
-                    normalizedServiceTotalRowMap.put(((String)e.getKey()).toLowerCase(), (int[])e.getValue());
+                for (Map.Entry<String, int[]> e : serviceTotalRowMap.entrySet()) {
+                    normalizedServiceTotalRowMap.put(e.getKey().toLowerCase(), e.getValue());
                 }
 
                 List<Object[]> stats = this.complaintRepository.findYesterdayCounts();
-                Map<String, Integer> countMap = new HashMap();
+                Map<String, Integer> countMap = new HashMap<>();
 
-                for(Object[] row : stats) {
+                for (Object[] row : stats) {
                     if (row[0] != null && row[1] != null) {
                         String service = row[0].toString().trim().toLowerCase();
-                        int countYesterday = ((Number)row[1]).intValue();
+                        int countYesterday = ((Number) row[1]).intValue();
                         countMap.put(service, countYesterday);
                     }
                 }
 
-                for(Map.Entry<String, Integer> entry : normalizedServiceRowMap.entrySet()) {
-                    String serviceName = (String)entry.getKey();
-                    int totalRowIdx2 = (Integer)entry.getValue();
+                for (Map.Entry<String, Integer> entry : normalizedServiceRowMap.entrySet()) {
+                    String serviceName = entry.getKey();
+                    int totalRowIdx2 = entry.getValue();
                     Row row = sheet2.getRow(totalRowIdx2);
                     if (row == null) {
                         row = sheet2.createRow(totalRowIdx2);
                     }
 
-                    int today = LocalDate.now().getDayOfMonth();
-                    int colIdx = 4 + (today - 2);
+                    int todayInt = LocalDate.now().getDayOfMonth();
+                    int colIdx = 4 + (todayInt - 2);
                     Cell cell = row.getCell(colIdx, Row.MissingCellPolicy.CREATE_NULL_AS_BLANK);
-                    double oldValue = cell.getCellType() == CellType.NUMERIC ? cell.getNumericCellValue() : (double)0.0F;
-                    int countYesterday = (Integer)countMap.getOrDefault(serviceName, 0);
-                    cell.setCellValue(oldValue + (double)countYesterday);
+                    double oldValue = cell.getCellType() == CellType.NUMERIC ? cell.getNumericCellValue() : (double) 0.0F;
+                    int countYesterday = countMap.getOrDefault(serviceName, 0);
+                    cell.setCellValue(oldValue + (double) countYesterday);
                 }
 
                 List<Object[]> totalStats = this.complaintRepository.findYesterdayOnTimeAndReceivedCounts();
-                Map<String, Integer[]> totalMap = new HashMap();
+                Map<String, Integer[]> totalMap = new HashMap<>();
 
-                for(Object[] row : totalStats) {
+                for (Object[] row : totalStats) {
                     if (row[0] != null && row[1] != null && row[2] != null) {
                         String service = row[0].toString().trim().toLowerCase();
-                        int totalOnTime = ((Number)row[1]).intValue();
-                        int totalReceived = ((Number)row[2]).intValue();
+                        int totalOnTime = ((Number) row[1]).intValue();
+                        int totalReceived = ((Number) row[2]).intValue();
                         totalMap.put(service, new Integer[]{totalOnTime, totalReceived});
                     }
                 }
 
-                for(Map.Entry<String, int[]> entry : normalizedServiceTotalRowMap.entrySet()) {
-                    String serviceName = (String)entry.getKey();
-                    int[] rows = (int[])entry.getValue();
-                    Integer[] values = (Integer[])totalMap.getOrDefault(serviceName, new Integer[]{0, 0});
+                for (Map.Entry<String, int[]> entry : normalizedServiceTotalRowMap.entrySet()) {
+                    String serviceName = entry.getKey();
+                    int[] rows = entry.getValue();
+                    Integer[] values = totalMap.getOrDefault(serviceName, new Integer[]{0, 0});
                     int totalOnTime = values[0];
                     int totalReceived = values[1];
-                    int today = LocalDate.now().getDayOfMonth();
-                    int colIdx = 4 + (today - 2);
+                    int todayInt = LocalDate.now().getDayOfMonth();
+                    int colIdx = 4 + (todayInt - 2);
                     Row rowOnTime = sheet2.getRow(rows[0]);
                     if (rowOnTime == null) {
                         rowOnTime = sheet2.createRow(rows[0]);
                     }
 
                     Cell cellOnTime = rowOnTime.getCell(colIdx, Row.MissingCellPolicy.CREATE_NULL_AS_BLANK);
-                    cellOnTime.setCellValue((double)totalOnTime);
+                    cellOnTime.setCellValue(totalOnTime);
                     Row rowReceived = sheet2.getRow(rows[1]);
                     if (rowReceived == null) {
                         rowReceived = sheet2.createRow(rows[1]);
                     }
 
                     Cell cellReceived = rowReceived.getCell(colIdx, Row.MissingCellPolicy.CREATE_NULL_AS_BLANK);
-                    cellReceived.setCellValue((double)totalReceived);
+                    cellReceived.setCellValue(totalReceived);
                 }
-                ByteArrayOutputStream out = new ByteArrayOutputStream();
-                workbook.write(out);
-                return out.toByteArray();
+                ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+                workbook.write(outputStream);
+                return outputStream.toByteArray();
             }
         } catch (IOException e) {
             throw new RuntimeException("Lỗi đọc/ghi file Excel", e);
         }
     }
 
-    public byte[] exportServiceQualityDoc() {
+    public byte[] exportDoc() {
         //Data table
-        List<IComplaintServiceQuality> dataTable = complaintRepository.reportServiceQuality();
-        List<ComplaintServiceQualityReportDto> convertList = dataTable.stream()
-                .map(ComplaintServiceQualityReportDto::new)
-                .collect(Collectors.toList());
+        List<DocxProjection> dataTable = complaintRepository.reportServiceQuality();
+//        List<DocReportDTO> convertList = dataTable.stream()
+//                .map(DocReportDTO::new)
+//                .collect(Collectors.toList());
 
         //Data chart
-        List<ComplaintsStatistic> chartData = complainStatisticRepository.findAll();
+//        List<ComplaintsStatistic> chartData = complainStatisticRepository.findAll();
 
-        try (InputStream is = new ClassPathResource("templates/doc/bao_cao_ngay_cldv_sme.docx").getInputStream();
+        try (InputStream is = new ClassPathResource("templates/sme.docx").getInputStream();
              OPCPackage pkg = OPCPackage.open(is);
              XWPFDocument doc = new XWPFDocument(pkg);
              ByteArrayOutputStream out = new ByteArrayOutputStream()) {
@@ -236,12 +275,8 @@ public class ComplaintService {
             map.put("${reportDate}", reportDate);
 
             replaceTextInDocument(doc, map);
-
-
             doc.write(out);
             return out.toByteArray();
-
-
         } catch (Exception e) {
             throw new RuntimeException("Lỗi fill template DOCX", e);
         }

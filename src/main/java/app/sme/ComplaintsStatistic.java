@@ -1,4 +1,4 @@
-package app.sme.service_quality;
+package app.sme;
 
 import lombok.Getter;
 import lombok.Setter;
