@@ -3,7 +3,7 @@ package app.sme;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
-@SpringBootApplication
+@SpringBootApplication(scanBasePackages = "app")
 public class SmeApplication {
 
     public static void main(String[] args) {
