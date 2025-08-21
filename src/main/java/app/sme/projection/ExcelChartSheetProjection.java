@@ -1,6 +1,6 @@
-package app.sme;
+package app.sme.projection;
 
-public interface SMEChartProjection {
+public interface ExcelChartSheetProjection {
     String getCategory();
     Long getTotalComplaintsLastMonth();
     String getDimensionType();      // ví dụ: "MONTH", "DAY", "AVG_THIS_YEAR", ...

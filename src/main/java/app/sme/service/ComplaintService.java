@@ -1,12 +1,18 @@
-package app.sme;
+package app.sme.service;
 
+import app.sme.entity.Category;
+import app.sme.projection.ExcelChartSheetProjection;
+import app.sme.projection.NormalExcelSheetProjection;
+import app.sme.repo.CategoryRepository;
+import app.sme.repo.ComplaintRepository;
+import com.aspose.cells.ImageType;
 import lombok.RequiredArgsConstructor;
 import org.apache.poi.openxml4j.opc.OPCPackage;
 import org.apache.poi.ss.usermodel.*;
+import org.apache.poi.util.Units;
 import org.apache.poi.xwpf.usermodel.*;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Service;
-
 import java.io.*;
 import java.time.LocalDate;
 import java.time.YearMonth;
@@ -20,8 +26,8 @@ import java.util.Map;
 public class ComplaintService {
     private final ComplaintRepository complaintRepository;
     private final CategoryRepository categoryRepository;
-    private static final String TEMPLATE_PATH = "/templates/SME_Phu_luc.xlsx";
-    private static final String OUTPUT_PATH = "/sme/data/SME_Phu_luc_output.xlsx";
+    private static final String TEMPLATES_XLSX_PATH = "/templates/SME.xlsx";
+    private static final String OUTPUT_XLSX_PATH = "/app/sme/data/SME_output.xlsx";
 
     private Sheet getRequiredSheet(Workbook workbook, String sheetName) {
         Sheet sheet = workbook.getSheet(sheetName);
@@ -34,14 +40,14 @@ public class ComplaintService {
     public byte[] exportExcelFile() {
         try {
             // Kiểm tra file đầu ra đã tồn tại chưa
-            File outputFile = new File(OUTPUT_PATH);
+            File outputFile = new File(OUTPUT_XLSX_PATH);
             InputStream inputStream;
             if (outputFile.exists()) {
                 inputStream = new FileInputStream(outputFile);
             } else {
-                inputStream = getClass().getResourceAsStream(TEMPLATE_PATH);
+                inputStream = getClass().getResourceAsStream(TEMPLATES_XLSX_PATH);
                 if (inputStream == null) {
-                    throw new IllegalArgumentException("Không tìm thấy file template SME_Phu_luc.xlsx");
+                    throw new IllegalArgumentException("Không tìm thấy file template SME.xlsx");
                 }
                 File outputDir = new File(outputFile.getParent());
                 if (!outputDir.exists()) {
@@ -96,12 +102,12 @@ public class ComplaintService {
                 // Lấy danh sách category từ CategoryRepository
                 List<Category> categories = categoryRepository.findAll();
                 // Lấy dữ liệu từ view hiện tại và view tháng trước
-                List<SMEProjection> data = complaintRepository.findAllSMEView();
-                List<SMEChartProjection> previousMonthData = complaintRepository.findErrorComplaintsLastMonth();
+                List<NormalExcelSheetProjection> data = complaintRepository.findAllSMEView();
+                List<ExcelChartSheetProjection> previousMonthData = complaintRepository.findErrorComplaintsLastMonth();
 
                 // Tạo map để ánh xạ category với count_yesterday
                 Map<String, Long> categoryCounts = new HashMap<>();
-                for (SMEProjection projection : data) {
+                for (NormalExcelSheetProjection projection : data) {
                     if (projection.getCategory() == null) continue; // Bỏ qua hàng tổng hợp
                     Long countYesterday = projection.getCountYesterday();
                     categoryCounts.put(projection.getCategory(), countYesterday != null ? countYesterday : 0L);
@@ -156,7 +162,7 @@ public class ComplaintService {
                 Map<String, Map<Integer, Long>> categoryOnTimeDayCounts = new HashMap<>();
                 Map<String, Long> categoryOnTimeMonthlyTotals = new HashMap<>();
                 Map<String, Long> categoryCooperationUnitTotals = new HashMap<>();
-                for (SMEProjection projection : data) {
+                for (NormalExcelSheetProjection projection : data) {
                     if (projection.getCategory() == null || projection.getDayOfMonth() == null) continue;
                     String category = projection.getCategory();
                     Integer day = projection.getDayOfMonth();
@@ -354,7 +360,7 @@ public class ComplaintService {
 
                 // Tạo map cho số phản ánh tháng trước và total_subscriber
                 Map<String, Long> previousMonthTotals = new HashMap<>();
-                for (SMEChartProjection projection : previousMonthData) {
+                for (ExcelChartSheetProjection projection : previousMonthData) {
                     if (projection.getCategory() == null) continue;
                     previousMonthTotals.put(projection.getCategory(), projection.getTotalComplaintsLastMonth());
                 }
@@ -397,20 +403,18 @@ public class ComplaintService {
                     row14 = sheet5.createRow(13);
                 }
 
-// TB năm ngoái → C14
                 long avgLastYear = complaintRepository.getComplaintSummary().stream()
                         .filter(p -> "AVG_LAST_YEAR".equals(p.getDimensionType()))
-                        .map(SMEChartProjection::getTotalComplaints)
+                        .map(ExcelChartSheetProjection::getTotalComplaints)
                         .findFirst()
                         .orElse(0L);
 
                 Cell avgLastYearCell = row14.getCell(2, Row.MissingCellPolicy.CREATE_NULL_AS_BLANK); // C = index 2
                 avgLastYearCell.setCellValue(avgLastYear);
 
-// TB năm nay → D14
                 long avgThisYear = complaintRepository.getComplaintSummary().stream()
                         .filter(p -> "AVG_THIS_YEAR".equals(p.getDimensionType()))
-                        .map(SMEChartProjection::getTotalComplaints)
+                        .map(ExcelChartSheetProjection::getTotalComplaints)
                         .findFirst()
                         .orElse(0L);
 
@@ -422,7 +426,7 @@ public class ComplaintService {
                     String dimValue = ym.toString(); // "2025-01"
                     long value = complaintRepository.getComplaintSummary().stream()
                             .filter(p -> "MONTH".equals(p.getDimensionType()) && dimValue.equals(p.getDimensionValue()))
-                            .map(SMEChartProjection::getTotalComplaints)
+                            .map(ExcelChartSheetProjection::getTotalComplaints)
                             .findFirst()
                             .orElse(0L);
 
@@ -436,7 +440,7 @@ public class ComplaintService {
                     String dimValue = date.toString(); // "2025-08-12"
                     long value = complaintRepository.getComplaintSummary().stream()
                             .filter(p -> "DAY".equals(p.getDimensionType()) && dimValue.equals(p.getDimensionValue()))
-                            .map(SMEChartProjection::getTotalComplaints)
+                            .map(ExcelChartSheetProjection::getTotalComplaints)
                             .findFirst()
                             .orElse(0L);
 
@@ -446,7 +450,7 @@ public class ComplaintService {
                 }
 
                 // Ghi đè file vào OUTPUT_PATH
-                try (FileOutputStream fileOut = new FileOutputStream(OUTPUT_PATH)) {
+                try (FileOutputStream fileOut = new FileOutputStream(OUTPUT_XLSX_PATH)) {
                     workbook.write(fileOut);
                 }
 
@@ -460,41 +464,139 @@ public class ComplaintService {
     }
 
     public byte[] exportDoc() {
-        //Data table
-//        List<DocxProjection> dataTable = complaintRepository.reportServiceQuality();
-//        List<DocReportDTO> convertList = dataTable.stream()
-//                .map(DocReportDTO::new)
-//                .collect(Collectors.toList());
-
-        //Data chart
-//        List<ComplaintsStatistic> chartData = complainStatisticRepository.findAll();
-
         try (InputStream is = new ClassPathResource("templates/SME.docx").getInputStream();
              OPCPackage pkg = OPCPackage.open(is);
              XWPFDocument doc = new XWPFDocument(pkg);
              ByteArrayOutputStream out = new ByteArrayOutputStream()) {
 
-            var now = LocalDate.now();
-            var date = now.getDayOfMonth();
-            var month = now.getMonthValue();
-            var year = now.getYear();
-            var reportDate = now.format(DateTimeFormatter.ofPattern("dd/MM/yyyy"));
+            // -------- Mở Excel --------
+            File excelFile = new File(OUTPUT_XLSX_PATH);
+            if (!excelFile.exists()) {
+                throw new RuntimeException("File Excel không tồn tại: " + OUTPUT_XLSX_PATH);
+            }
 
             Map<String, String> map = new HashMap<>();
+            try (FileInputStream fis = new FileInputStream(excelFile);
+                 Workbook workbook = WorkbookFactory.create(fis)) {
 
-            map.put("${date}", String.valueOf(date));
-            map.put("${month}", String.valueOf(month));
-            map.put("${year}", String.valueOf(year));
-            map.put("${reportDate}", reportDate);
+                Sheet sheet = workbook.getSheet("Bieu_Do");
+                if (sheet == null) throw new RuntimeException("Không tìm thấy sheet Bieu_Do");
 
+                // Lấy giá trị từ ô U14, N14, L14, K14...
+                double numPA = sheet.getRow(13).getCell(20).getNumericCellValue(); // U14 (0-indexed)
+                double numPALastWeek = sheet.getRow(13).getCell(13).getNumericCellValue(); // N14
+                double numPALastMonth = 0; // theo yêu cầu
+                double numPACumulative = sheet.getRow(13).getCell(12).getNumericCellValue(); // L14
+                double prevMonthTotal = sheet.getRow(13).getCell(11).getNumericCellValue(); // L13
+
+                double pctChangeWeek = ((numPA - numPALastWeek) / numPALastWeek) * 100;
+                double pctChangeMonth = ((numPACumulative - numPALastMonth)) * 100;
+                pctChangeWeek = Math.round(pctChangeWeek);
+                pctChangeMonth = Math.round(pctChangeMonth);
+
+                // Tính avg_PA_per_day
+                LocalDate now = LocalDate.now();
+                int dayOfMonth = now.getDayOfMonth();
+                double avgPerDay = numPACumulative / Math.max(1, dayOfMonth);
+
+                YearMonth prevMonth = YearMonth.now().minusMonths(1);
+                int daysPrevMonth = prevMonth.lengthOfMonth();
+                double avgPerDayLastMonth = prevMonthTotal / daysPrevMonth;
+
+                double pctChangeAvg = ((avgPerDay - avgPerDayLastMonth) / Math.max(1, avgPerDayLastMonth)) * 100;
+                pctChangeAvg = Math.round(pctChangeAvg);
+
+                // Đếm "Đạt" từ G6:G9 và J6:J9
+                int passedByDay = 0;
+                int passedByMonth = 0;
+                for (int r = 5; r <= 8; r++) { // 0-indexed
+                    Cell cDay = sheet.getRow(r).getCell(6); // G
+                    if (cDay != null && "Đạt".equals(cDay.getStringCellValue())) passedByDay++;
+                    Cell cMonth = sheet.getRow(r).getCell(9); // J
+                    if (cMonth != null && "Đạt".equals(cMonth.getStringCellValue())) passedByMonth++;
+                }
+
+                // Gán vào map placeholder
+                map.put("${num_PA}", String.valueOf((int) numPA));
+                map.put("${pct_change_week}", (pctChangeWeek >= 0 ? "tăng " : "giảm ") + Math.abs((int) pctChangeWeek));
+                map.put("${num_PA_last_week}", String.valueOf((int) numPALastWeek));
+                map.put("${pct_change_month}", (pctChangeMonth >= 0 ? "tăng " : "giảm ") + Math.abs((int) pctChangeMonth));
+                map.put("${num_PA_last_month}", String.valueOf(0));
+                map.put("${passed_by_day}", String.valueOf(passedByDay));
+                map.put("${num_PA_cumulative}", String.valueOf((int) numPACumulative));
+                map.put("${avg_PA_per_day}", String.valueOf((int) avgPerDay));
+                map.put("${avg_PA_per_day_last_month}", String.valueOf((int) avgPerDayLastMonth));
+                map.put("${pct_change_avg}", (pctChangeAvg >= 0 ? "tăng " : "giảm ") + Math.abs((int) pctChangeAvg));
+                map.put("${passed_by_month}", String.valueOf(passedByMonth));
+                map.put("${closed_complaint_this_month}", "0");
+                map.put("${closed_complaint_percent}", "0");
+
+                // Thêm placeholder ngày tháng
+                map.put("${day}", String.valueOf(dayOfMonth));
+                map.put("${month}", String.valueOf(now.getMonthValue()));
+                map.put("${year}", String.valueOf(now.getYear()));
+
+            }
             replaceTextInDocument(doc, map);
+            com.aspose.cells.Workbook asposeWorkbook = new com.aspose.cells.Workbook(OUTPUT_XLSX_PATH);
+            com.aspose.cells.Worksheet asposeSheet = asposeWorkbook.getWorksheets().get("Bieu_Do");
+
+            com.aspose.cells.ImageOrPrintOptions options = new com.aspose.cells.ImageOrPrintOptions();
+            options.setImageType(ImageType.PNG);
+            com.aspose.cells.Chart chart = asposeSheet.getCharts().get(0);
+            ByteArrayOutputStream chartOut = new ByteArrayOutputStream();
+            chart.toImage(chartOut, options);
+            byte[] chartBytes = chartOut.toByteArray();
+
+            com.aspose.cells.Range range = asposeSheet.getCells().createRange("A3:L9");
+            byte[] tableBytes = range.toImage(options);
+
+            int picCount = 0;
+            for (XWPFParagraph p : doc.getParagraphs()) {
+                List<XWPFRun> runs = p.getRuns();
+                for (int i = 0; i < runs.size(); i++) {
+                    XWPFRun run = runs.get(i);
+                    for (XWPFPicture pic : run.getEmbeddedPictures()) {
+                        picCount++;
+                        p.removeRun(i); // xóa run cũ
+
+                        XWPFRun newRun = p.insertNewRun(i);
+                        if (picCount == 1) {
+                            // ảnh 1: bảng A3:L9
+                            newRun.addPicture(
+                                    new ByteArrayInputStream(tableBytes),
+                                    Document.PICTURE_TYPE_PNG,
+                                    "table.png",
+                                    Units.toEMU(500),
+                                    Units.toEMU(100)
+                            );
+                        } else {
+                            // ảnh 2: chart
+                            newRun.addPicture(
+                                    new ByteArrayInputStream(chartBytes),
+                                    Document.PICTURE_TYPE_PNG,
+                                    "chart.png",
+                                    Units.toEMU(450),
+                                    Units.toEMU(300)
+                            );
+                        }
+
+                        if (picCount == 2) break;
+                    }
+                    if (picCount == 2) break;
+                }
+                if (picCount == 2) break;
+            }
+
+
             doc.write(out);
             return out.toByteArray();
-        } catch (Exception e) {
-            throw new RuntimeException("Lỗi fill template DOCX", e);
-        }
 
+        } catch (Exception e) {
+            throw new RuntimeException("Lỗi fill template DOCX hoặc đọc Excel", e);
+        }
     }
+
 
     private void replaceTextInDocument(XWPFDocument doc, Map<String, String> map) {
         // Paragraphs
@@ -531,26 +633,18 @@ public class ComplaintService {
 
 
     private void replaceTextInParagraph(XWPFParagraph paragraph, Map<String, String> map) {
-        StringBuilder sb = new StringBuilder();
         for (XWPFRun run : paragraph.getRuns()) {
-            sb.append(run.text());
-        }
-        String combined = sb.toString();
-        boolean changed = false;
-        for (Map.Entry<String, String> e : map.entrySet()) {
-            if (combined.contains(e.getKey())) {
-                combined = combined.replace(e.getKey(), e.getValue());
-                changed = true;
+            String text = run.text();
+            boolean changed = false;
+            for (Map.Entry<String, String> e : map.entrySet()) {
+                if (text.contains(e.getKey())) {
+                    text = text.replace(e.getKey(), e.getValue());
+                    changed = true;
+                }
             }
-        }
-        if (changed) {
-            // clear old runs and set a single new run (giữ định dạng cơ bản)
-            int runCount = paragraph.getRuns().size();
-            for (int i = runCount - 1; i >= 0; i--) {
-                paragraph.removeRun(i);
+            if (changed) {
+                run.setText(text, 0); // ghi đè text mà không mất style
             }
-            XWPFRun newRun = paragraph.createRun();
-            newRun.setText(combined, 0);
         }
     }
 

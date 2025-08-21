@@ -1,5 +1,6 @@
-package app.sme;
+package app.sme.controller;
 
+import app.sme.service.ComplaintService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;

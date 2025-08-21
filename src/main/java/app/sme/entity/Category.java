@@ -1,4 +1,4 @@
-package app.sme;
+package app.sme.entity;
 
 import lombok.Getter;
 import lombok.Setter;

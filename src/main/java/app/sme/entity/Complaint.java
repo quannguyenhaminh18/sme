@@ -1,4 +1,4 @@
-package app.sme;
+package app.sme.entity;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;

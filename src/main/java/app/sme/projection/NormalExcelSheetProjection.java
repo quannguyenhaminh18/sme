@@ -1,17 +1,12 @@
-package app.sme;
+package app.sme.projection;
 
-public interface SMEProjection {
+public interface NormalExcelSheetProjection {
     String getCategory();
     Integer getDayOfMonth();
     Long getCountYesterday();
     Long getTotalReceivedYesterday();
     Long getTotalOnTimeYesterday();
-    Double getAvgProcessingTimeHours();
     Long getCooperationUnitCount();
-    Long getTotalLast8Days();
-    Long getTotalLast8Months();
-    Long getTotalCurrentYear();
-    Long getTotalLastYear();
     Long getTotalComplaintsPerDay();
     Long getTotalClosedPerDay();
     Long getTotalOnTimePerDay();

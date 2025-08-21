@@ -31,12 +31,29 @@
         <java.version>11</java.version>
         <spring.boot.version>2.7.18</spring.boot.version>
     </properties>
+    <repositories>
+        <repository>
+            <id>AsposeJavaAPI</id>
+            <name>Aspose Java API</name>
+            <url>https://repository.aspose.com/repo/</url>
+        </repository>
+    </repositories>
     <dependencies>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter</artifactId>
         </dependency>
-
+        <dependency>
+            <groupId>com.aspose</groupId>
+            <artifactId>aspose-cells</artifactId>
+            <version>24.6</version>
+        </dependency>
+        <dependency>
+            <groupId>com.aspose</groupId>
+            <artifactId>aspose-words</artifactId>
+            <version>24.6</version>
+            <type>pom</type>
+        </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-devtools</artifactId>
@@ -71,7 +88,6 @@
             <artifactId>poi-ooxml</artifactId>
             <version>5.2.5</version> <!-- hoặc version mới nhất -->
         </dependency>
-
     </dependencies>
 
     <build>
@@ -107,5 +123,4 @@
             </plugin>
         </plugins>
     </build>
-
 </project>

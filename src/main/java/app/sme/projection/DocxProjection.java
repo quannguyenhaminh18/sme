@@ -1,4 +1,4 @@
-package app.sme;
+package app.sme.projection;
 
 import java.math.BigDecimal;
 
