@@ -5,6 +5,7 @@ import app.sme.projection.ExcelChartSheetProjection;
 import app.sme.projection.NormalExcelSheetProjection;
 import app.sme.repo.CategoryRepository;
 import app.sme.repo.ComplaintRepository;
+import app.sme.util.WordUtil;
 import com.aspose.cells.ImageType;
 import lombok.RequiredArgsConstructor;
 import org.apache.poi.openxml4j.opc.OPCPackage;
@@ -537,7 +538,7 @@ public class ComplaintService {
                 map.put("${year}", String.valueOf(now.getYear()));
 
             }
-            replaceTextInDocument(doc, map);
+            WordUtil.replaceTextInDocument(doc, map);
             com.aspose.cells.Workbook asposeWorkbook = new com.aspose.cells.Workbook(OUTPUT_XLSX_PATH);
             com.aspose.cells.Worksheet asposeSheet = asposeWorkbook.getWorksheets().get("Bieu_Do");
 
@@ -596,56 +597,4 @@ public class ComplaintService {
             throw new RuntimeException("Lỗi fill template DOCX hoặc đọc Excel", e);
         }
     }
-
-
-    private void replaceTextInDocument(XWPFDocument doc, Map<String, String> map) {
-        // Paragraphs
-        for (XWPFParagraph p : doc.getParagraphs()) {
-            replaceTextInParagraph(p, map);
-        }
-
-        // Tables
-        for (XWPFTable t : doc.getTables()) {
-            for (XWPFTableRow r : t.getRows()) {
-                for (XWPFTableCell c : r.getTableCells()) {
-                    for (XWPFParagraph p : c.getParagraphs()) {
-                        replaceTextInParagraph(p, map);
-                    }
-                }
-            }
-
-        }
-
-        // Headers/Footers (nếu có)
-        for (XWPFHeader header : doc.getHeaderList()) {
-            for (XWPFParagraph p : header.getParagraphs()) replaceTextInParagraph(p, map);
-            for (XWPFTable t : header.getTables()) {
-                for (XWPFTableRow r : t.getRows())
-                    for (XWPFTableCell c : r.getTableCells())
-                        for (XWPFParagraph p : c.getParagraphs()) replaceTextInParagraph(p, map);
-            }
-        }
-
-        for (XWPFFooter footer : doc.getFooterList()) {
-            for (XWPFParagraph p : footer.getParagraphs()) replaceTextInParagraph(p, map);
-        }
-    }
-
-
-    private void replaceTextInParagraph(XWPFParagraph paragraph, Map<String, String> map) {
-        for (XWPFRun run : paragraph.getRuns()) {
-            String text = run.text();
-            boolean changed = false;
-            for (Map.Entry<String, String> e : map.entrySet()) {
-                if (text.contains(e.getKey())) {
-                    text = text.replace(e.getKey(), e.getValue());
-                    changed = true;
-                }
-            }
-            if (changed) {
-                run.setText(text, 0); // ghi đè text mà không mất style
-            }
-        }
-    }
-
 }

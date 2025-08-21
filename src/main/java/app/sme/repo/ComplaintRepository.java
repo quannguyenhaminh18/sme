@@ -9,7 +9,7 @@ import org.springframework.data.jpa.repository.Query;
 import java.util.List;
 
 public interface ComplaintRepository extends JpaRepository<Complaint, Long> {
-    @Query(value = "SELECT * FROM vw_complaints_stats", nativeQuery = true)
+    @Query(value = "SELECT * FROM optimized_complaint_view", nativeQuery = true)
     List<NormalExcelSheetProjection> findAllSMEView();
 
     @Query(value = "SELECT c.category AS category, " +
