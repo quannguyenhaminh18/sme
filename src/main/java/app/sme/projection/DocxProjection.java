@@ -1,30 +1,6 @@
 package app.sme.projection;
 
-import java.math.BigDecimal;
-
 public interface DocxProjection {
-    String getName();
-
-    BigDecimal getKpi();
-
-    Long getTotalSubscriber();
-
-    Long getTotalComplaintDay();
-
-    BigDecimal getComplaintRateDay();
-
-    Long getTotalComplaintMonth();
-
-    BigDecimal getComplaintRateMonth();
-
-    Long getTotalLastMonth();
-
-    BigDecimal getComplaintRateLastMonth();
-
-    String getKpiDay();
-
-    String getKpiMonth();
-
-    BigDecimal getCompareRate();
-
+    String getCategory();
+    Long getTotalComplaintsLastMonth();
 }

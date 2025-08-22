@@ -1,8 +1,9 @@
 package app.sme.repo;
 
+import app.sme.projection.NormalSheetDTO;
 import app.sme.entity.Complaint;
+import app.sme.projection.DocxProjection;
 import app.sme.projection.ExcelChartSheetProjection;
-import app.sme.projection.NormalExcelSheetProjection;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 
@@ -10,16 +11,9 @@ import java.util.List;
 
 public interface ComplaintRepository extends JpaRepository<Complaint, Long> {
     @Query(value = "SELECT * FROM optimized_complaint_view", nativeQuery = true)
-    List<NormalExcelSheetProjection> findAllSMEView();
+    List<NormalSheetDTO> findTotalView();
 
-    @Query(value = "SELECT c.category AS category, " +
-            "COUNT(0) AS totalComplaintsLastMonth " +
-            "FROM complaints c " +
-            "WHERE c.complaint_type LIKE '%lỗi%' " +
-            "AND c.closing_date >= DATE_FORMAT(CURDATE(), '%Y-%m-01') - INTERVAL 1 MONTH " +
-            "AND c.closing_date < DATE_FORMAT(CURDATE(), '%Y-%m-01') " +
-            "GROUP BY c.category",
-            nativeQuery = true)
+    @Query(value = "SELECT * from previous_month_complaint_view", nativeQuery = true)
     List<ExcelChartSheetProjection> findErrorComplaintsLastMonth();
 
     @Query(
@@ -28,5 +22,8 @@ public interface ComplaintRepository extends JpaRepository<Complaint, Long> {
             nativeQuery = true
     )
     List<ExcelChartSheetProjection> getComplaintSummary();
+
+    @Query(value = "SELECT * FROM previous_month_complaint_view", nativeQuery = true)
+    List<DocxProjection> findAllPreviousMonth();
 
 }
